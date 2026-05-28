@@ -1,5 +1,7 @@
 # Context Bridge
 
+[![CI](https://github.com/dbean10/context-bridge/actions/workflows/ci.yml/badge.svg)](https://github.com/dbean10/context-bridge/actions/workflows/ci.yml)
+
 Give the **claude.ai chat** (the "strategy" Claude, no local access) the ability to
 (a) sanity-check files in `~/Projects/` and (b) see what **Claude Code's agents
 actually did**, by syncing **pre-sanitized** snapshots and transcripts to a store
