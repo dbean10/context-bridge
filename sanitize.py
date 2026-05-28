@@ -110,11 +110,32 @@ REDACTION_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("BEARER", re.compile(r"[Bb]earer\s+[A-Za-z0-9._\-]{20,}")),
     ("TURSO_URL", re.compile(r"libsql://[A-Za-z0-9._\-]+")),
     ("AUTH_TOKEN_TURSO", re.compile(r"eyJ[A-Za-z0-9._\-]{30,}")),  # JWT shape (Turso auth tokens, etc.)
+    # GENERIC_ASSIGN fires ONLY on a QUOTED string literal assigned to a
+    # secret-named identifier — i.e. an embedded value, not code that reads a
+    # secret. `token = os.getenv("X")`, `--secret=name`, and `key = ""` do NOT
+    # match (no quoted opaque RHS). The opacity check lives in redact().
     ("GENERIC_ASSIGN", re.compile(
         r"(?i)\b(?:api[_-]?key|secret|token|password|passwd|auth[_-]?token|access[_-]?token)\b"
-        r"\s*[:=]\s*['\"]?([A-Za-z0-9._\-]{12,})['\"]?"
+        r"\s*[:=]\s*(['\"])([^'\"]{12,})\1"
     )),
 ]
+
+
+# Values that are clearly a CODE REFERENCE (env lookup / interpolation) rather
+# than an embedded secret. Name-like values (e.g. `anthropic-key`) are handled
+# by the opacity gate instead, which requires letters AND digits.
+_NOT_A_SECRET_VALUE = re.compile(
+    r"""(?xi)
+    ^(?:
+        os\. | getenv | environ | process\.env | deno\.env |   # env lookups
+        \$\{? | \#\{                                            # shell / interpolation
+    )
+    """
+)
+
+# A real opaque secret value has entropy: a mix of letters AND digits (or
+# symbols) and no spaces. Pure words, dotted paths, and prose don't qualify.
+_LOOKS_OPAQUE = re.compile(r"^(?=.*[A-Za-z])(?=.*\d)[A-Za-z0-9._\-+/=]{12,}$")
 
 
 # ----------------------------------------------------------------------------
@@ -135,13 +156,19 @@ class RedactionStats:
 
 
 def redact(text: str, stats: RedactionStats) -> str:
-    """Apply every redaction pattern. For GENERIC_ASSIGN, keep the key name and
-    redact only the value group; for the rest, redact the whole match."""
+    """Apply every redaction pattern. For GENERIC_ASSIGN, redact only the
+    quoted value (and only if it actually looks like an opaque secret, not a
+    code reference or a bare name); for the rest, redact the whole match."""
     for label, pat in REDACTION_PATTERNS:
         if label == "GENERIC_ASSIGN":
             def _sub(m: re.Match[str], _label: str = label) -> str:
+                value = m.group(2)
+                # Skip code references / env lookups / bare names, and anything
+                # that doesn't look opaque (real secrets mix letters + digits).
+                if _NOT_A_SECRET_VALUE.match(value) or not _LOOKS_OPAQUE.match(value):
+                    return m.group(0)
                 stats.bump(_label)
-                return m.group(0).replace(m.group(1), f"[REDACTED:{_label}]")
+                return m.group(0).replace(value, f"[REDACTED:{_label}]")
             text = pat.sub(_sub, text)
         else:
             def _sub2(m: re.Match[str], _label: str = label) -> str:
