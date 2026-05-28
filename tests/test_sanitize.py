@@ -23,6 +23,9 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SANITIZE = REPO_ROOT / "sanitize.py"
 
+sys.path.insert(0, str(REPO_ROOT))
+from sanitize import RedactionStats, redact  # noqa: E402
+
 # Every distinct secret string we plant. None may appear in staged output.
 PLANTED = [
     "sk-ant-api03-THISshouldNEVERappear1234567890",   # real .env value
@@ -160,3 +163,61 @@ def test_manifest_written(tmp_path: Path) -> None:
     assert manifest["redaction_total"] >= 2
     assert any(r["repo"] == "demo-repo" for r in manifest["repos"])
     assert any(s["session"] == "sess-001" for s in manifest["sessions"])
+
+
+# --- GENERIC_ASSIGN precision: real false positives from the live run -------
+# These are code that READS secrets, env-var NAMES, and empty/placeholder
+# values. None is an embedded secret; none may be redacted.
+NO_REDACT_CASES = [
+    'api_key = os.environ.get("OPENAI_API_KEY")',
+    'auth_token=os.getenv("TURSO_TOKEN", "")',
+    'secret = os.environ["INTERNAL_AUTH_TOKEN"]',
+    'client = anthropic.AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))',
+    'token = os.getenv("GITHUB_TOKEN", "")',
+    "export ANTHROPIC_API_KEY=$(gcloud secrets versions access latest --secret=anthropic-key)",
+    'apiKey: process.env.OPENAI_API_KEY,',
+    'SECRET = ""',
+    'password = ""',
+    "auth_token: Deno.env.get('TURSO_TOKEN'),",
+]
+
+# These ARE embedded opaque values and MUST be redacted.
+REDACT_CASES = [
+    'SECRET = "a1b2c3d4e5f6g7h8i9j0"',
+    'api_key = "Xk29fLp03qWZ8aB7cD4e"',
+    "password = 'P4ssw0rdWithEntropy99'",
+    'auth_token: "tok_9fA2bC7dE1gH4jK6mN8p"',
+]
+
+
+def test_generic_assign_skips_code_references() -> None:
+    for case in NO_REDACT_CASES:
+        stats = RedactionStats()
+        out = redact(case, stats)
+        assert "GENERIC_ASSIGN" not in stats.counts, f"false positive on: {case!r} -> {out!r}"
+        assert out == case, f"should be unchanged: {case!r} -> {out!r}"
+
+
+def test_generic_assign_catches_embedded_values() -> None:
+    for case in REDACT_CASES:
+        stats = RedactionStats()
+        out = redact(case, stats)
+        assert stats.counts.get("GENERIC_ASSIGN", 0) == 1, f"missed embedded secret: {case!r}"
+        assert "[REDACTED:GENERIC_ASSIGN]" in out
+        # the identifier and quotes survive; only the value is replaced
+        assert "=" in out or ":" in out
+
+
+def test_high_confidence_patterns_still_fire() -> None:
+    # Tightening GENERIC_ASSIGN must not weaken the precise provider patterns.
+    stats = RedactionStats()
+    sample = (
+        "key=sk-ant-api03-REALshapedKEY1234567890\n"
+        "pat=ghp_REALshapedPAT1234567890abcdef\n"
+        "url=libsql://prod-db-12345.turso.io\n"
+    )
+    out = redact(sample, stats)
+    assert "sk-ant-api03-REALshapedKEY1234567890" not in out
+    assert "ghp_REALshapedPAT1234567890abcdef" not in out
+    assert "libsql://prod-db-12345.turso.io" not in out
+
