@@ -26,7 +26,7 @@ cp .env.example .env        # fill in PROJECT, BUCKET, REGION, etc.
 ./verify.sh                 # prove private + scoped + expiring
 
 # then sync sanitized output (outbound only):
-gcloud storage rsync -r -d ~/.context-bridge/staged gs://$BUCKET
+gcloud storage rsync -r --delete-unmatched-destination-objects ~/.context-bridge/staged gs://$BUCKET
 ```
 
 The bucket is multi-project by design — it holds sanitized snapshots for every

@@ -7,9 +7,9 @@
 #   2. inspect.sh   GATE  if it exits non-zero, ABORT — never sync a leak
 #   3. non-empty    GATE  refuse to sync if staged is suspiciously empty
 #                         (a broken sanitize must not mirror-delete the bucket)
-#   4. rsync -d           outbound MIRROR to gs://$BUCKET (private)
+#   4. rsync (mirror)     outbound MIRROR to gs://$BUCKET (private)
 #
-# The bucket is a PROJECTION of current local state: rsync -d deletes bucket
+# The bucket is a PROJECTION of current local state: mirror-delete removes bucket
 # objects with no local counterpart so the chat never sees stale/ghost files.
 # That delete power is exactly why gates 2+3 exist — they ensure we never
 # mirror an empty or unsafe staged dir over a good bucket.
@@ -94,7 +94,10 @@ fi
 
 # ── 4. Outbound MIRROR ──────────────────────────────────────────────────────
 echo "[4/4] mirror -> ${BUCKET_URI}"
-RSYNC=(gcloud storage rsync -r -d "$STAGED" "$BUCKET_URI" --project "$PROJECT")
+# NOTE: `gcloud storage rsync` uses the long flag
+# --delete-unmatched-destination-objects for mirror/delete behavior. The short
+# `-d` form is from the older `gsutil rsync` and is NOT recognized here.
+RSYNC=(gcloud storage rsync -r --delete-unmatched-destination-objects "$STAGED" "$BUCKET_URI" --project "$PROJECT")
 if [ "$DRY_RUN" -eq 1 ]; then
   echo "  DRY-RUN: ${RSYNC[*]} --dry-run"
   "${RSYNC[@]}" --dry-run

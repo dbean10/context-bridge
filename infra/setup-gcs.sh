@@ -117,4 +117,4 @@ run gcloud storage buckets add-iam-policy-binding "$BUCKET_URI" \
 echo
 echo "[setup-gcs] done. NEXT: ./verify.sh — prove private + lifecycle + read-only."
 echo "[setup-gcs] then sync staged output with:"
-echo "  gcloud storage rsync -r -d ~/.context-bridge/staged ${BUCKET_URI}"
+echo "  gcloud storage rsync -r --delete-unmatched-destination-objects ~/.context-bridge/staged ${BUCKET_URI}"
