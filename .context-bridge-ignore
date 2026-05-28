@@ -1,0 +1,18 @@
+# .context-bridge-ignore — gitignore-style, read by sanitize.py
+#
+# Drop a copy of this in any repo under ~/Projects/ to exclude paths
+# from the sanitized snapshot, on top of the built-in denylist.
+#
+# Supported (small subset of gitignore semantics):
+#   exact/path           exact file or directory prefix
+#   dir/                 directory and everything under it
+#   *.suffix             suffix match
+#
+# The built-in SECRET_FILE_GLOBS and SKIP_DIRS already cover .env,
+# *.pem, .git/, node_modules/, etc. — this is for project-specific
+# extras (large fixtures, generated docs, vendored code, etc.).
+
+# examples:
+# fixtures/large-dataset.json
+# docs/generated/
+# *.snapshot

@@ -1,0 +1,33 @@
+# ── Context Bridge output — NEVER commit ──────────────────────────
+# Sanitized snapshots and transcripts land here. Even though they're
+# scrubbed, they are not source and have no business in git history.
+staged/
+.context-bridge/
+*.staged.md
+*.staged.json
+
+# ── Local secrets / config ────────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+service-account*.json
+
+# ── Python ────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+dist/
+build/
+
+# ── Editor / OS ───────────────────────────────────────────────────
+.DS_Store
+.idea/
+.vscode/
+*.swp

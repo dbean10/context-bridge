@@ -1,0 +1,26 @@
+[project]
+name = "context-bridge"
+version = "0.1.0"
+description = "Sanitized, outbound-only bridge from local Claude Code state to the claude.ai chat"
+requires-python = ">=3.11"
+dependencies = []  # sanitize.py is stdlib-only by design
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: touches network or real GCP/Drive (not run in CI)",
+]
+addopts = "--tb=short"
+testpaths = ["tests"]
