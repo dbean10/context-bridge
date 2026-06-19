@@ -370,9 +370,27 @@ def _result_body_len(rc: Any) -> int:
     return 0
 
 
-def sanitize_session(jsonl_path: Path, stats: RedactionStats) -> tuple[list[SessionEvent], dict[str, int]]:
+def _parse_ts(raw: Any) -> datetime | None:
+    """Parse a transcript event timestamp to an aware UTC datetime, or None.
+
+    Tolerates the transcript's 'Z' suffix and any non-string / unparseable
+    value (returns None so the caller skips it). Verified ts-less record types
+    in real transcripts: ai-title, file-history-snapshot, last-prompt,
+    permission-mode — none of which are conversation events.
+    """
+    if not raw or not isinstance(raw, str):
+        return None
+    try:
+        return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def sanitize_session(jsonl_path: Path, stats: RedactionStats) -> tuple[list[SessionEvent], dict[str, Any]]:
     events: list[SessionEvent] = []
-    tallies = {"text": 0, "tool_use": 0, "tool_result": 0, "system": 0, "lines": 0, "tools_by_name": {}}
+    tallies: dict[str, Any] = {
+        "text": 0, "tool_use": 0, "tool_result": 0, "system": 0, "lines": 0, "tools_by_name": {},
+    }
 
     with jsonl_path.open("r", encoding="utf-8", errors="replace") as fh:
         for line in fh:
@@ -417,10 +435,21 @@ def sanitize_session(jsonl_path: Path, stats: RedactionStats) -> tuple[list[Sess
                     ))
                     tallies["tool_result"] += 1
 
+    # first_event_at / last_event_at: min/max over PARSED event timestamps,
+    # skipping events with no timestamp. Done over `events` rather than a
+    # re-scan of lines — every event carries a ts, every ts-less line produced
+    # no event. Parse to aware datetimes (never lexical compare) so a future
+    # stamp without ms or with a real offset still sorts chronologically.
+    # .isoformat() normalises the transcript's 'Z'/ms form to the manifest's
+    # canonical '+00:00'/µs rendering (same as generated_at).
+    event_ts = [p for p in (_parse_ts(e.ts) for e in events) if p is not None]
+    tallies["first_event_at"] = min(event_ts).isoformat() if event_ts else None
+    tallies["last_event_at"] = max(event_ts).isoformat() if event_ts else None
+
     return events, tallies
 
 
-def session_markdown(session_id: str, src: Path, events: list[SessionEvent], tallies: dict[str, int]) -> str:
+def session_markdown(session_id: str, src: Path, events: list[SessionEvent], tallies: dict[str, Any]) -> str:
     md = [f"# Session timeline: `{session_id}`\n"]
     md.append(f"_Sanitized {datetime.now(UTC).isoformat()} · source: `{src}`_\n")
     md.append("> Structured extraction only. No raw tool-output bodies are present in this file.\n")
@@ -492,6 +521,7 @@ def main(argv: list[str] | None = None) -> int:
 
     stats = RedactionStats()
     manifest: dict[str, Any] = {
+        "manifest_version": 2,
         "generated_at": datetime.now(UTC).isoformat(),
         "projects_root": str(projects_root),
         "cc_root": str(cc_root),
@@ -529,6 +559,8 @@ def main(argv: list[str] | None = None) -> int:
             manifest["sessions"].append({
                 "session": sid, "source": str(jsonl), "lines": tallies["lines"],
                 "events": len(events), "tools_by_name": tallies["tools_by_name"],
+                "last_event_at": tallies["last_event_at"],
+                "first_event_at": tallies["first_event_at"],
             })
             print(f"  - {sid}: {len(events)} events from {tallies['lines']} lines", file=sys.stderr)
             if not args.dry_run:
