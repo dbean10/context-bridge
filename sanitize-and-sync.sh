@@ -63,7 +63,7 @@ if [ "$SKIP_SANITIZE" -eq 1 ]; then
   echo "[1/4] sanitize — SKIPPED (--skip-sanitize); using existing staged/"
 else
   echo "[1/4] sanitize"
-  ( cd "$ROOT" && python3 sanitize.py )
+  ( cd "$ROOT" && uv run python3 sanitize.py )
 fi
 
 # ── 2. Inspect GATE (hard) ──────────────────────────────────────────────────
