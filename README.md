@@ -79,10 +79,10 @@ real data.
 ## Build order
 
 1. ✅ `sanitize.py` — the gate. Stdlib-only, offline. Built and tested.
-2. ⬜ `sanitize-and-sync.sh` — wraps sanitize.py + `gcloud storage cp` to GCS.
-3. ⬜ `infra/setup-gcs.sh` — private bucket, uniform access, lifecycle expiry, IAM.
-4. ⬜ `mcp-server/` — FastMCP read-only server on Cloud Run; register as connector.
-5. ⬜ `fswatch` + `launchd` — near-real-time, only after the sanitizer is proven.
+2. ✅ `sanitize-and-sync.sh` — sanitize.py + an outbound `gcloud storage rsync` mirror to GCS, gated by `inspect.sh` (leak scan) and a non-empty guard.
+3. ✅ `infra/setup-gcs.sh` + `infra/verify.sh` — private bucket (uniform access, public-access-prevention, lifecycle expiry) and a read-only reader SA, behind a configured≠enforcing verify gate.
+4. ✅ FastMCP read-only server on Cloud Run, registered as a claude.ai connector. **Built as the sibling `dbean10/context-bridge-mcp` repo, not in `mcp-server/` here.**
+5. ⬜ `fswatch` + `launchd` — near-real-time auto-sync. Still deferred; sync is manual today. The sanitizer is now proven, so this is the next step.
 
 ## Tests
 
